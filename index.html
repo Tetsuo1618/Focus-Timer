@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Manual Override — Focus Timer</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:ital,wght@0,400;0,500;1,400&family=Fraunces:ital,opsz,wght@0,9..144,300;1,9..144,400&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0B1120;
+      --surface:   #111827;
+      --border:    #1E2D42;
+      --teal:      #0EA5A0;
+      --amber:     #D97706;
+      --red:       #DC2626;
+      --text:      #E8ECF4;
+      --muted:     #5A6A80;
+      --card-bg:   #141E2E;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      overflow-x: hidden;
+    }
+
+    /* Subtle grid background */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; z-index: 0;
+      background-image:
+        linear-gradient(rgba(14,165,160,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(14,165,160,0.03) 1px, transparent 1px);
+      background-size: 48px 48px;
+      pointer-events: none;
+    }
+
+    .app {
+      position: relative; z-index: 1;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1.2rem 3rem;
+      max-width: 680px;
+      margin: 0 auto;
+    }
+
+    /* ── Top bar ── */
+    .topbar {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1rem;
+      margin-bottom: 2.5rem;
+    }
+
+    .brand {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 1.5rem;
+      letter-spacing: 0.1em;
+      color: var(--teal);
+    }
+
+    .brand span { color: var(--text); }
+
+    .session-badge {
+      font-size: 0.6rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: var(--border);
+      padding: 0.35em 0.9em;
+    }
+
+    /* ── Task input ── */
+    .task-section {
+      width: 100%;
+      margin-bottom: 2rem;
+    }
+
+    .task-label {
+      font-size: 0.62rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.5rem;
+    }
+
+    .task-input {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--teal);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 1rem;
+      padding: 0.85rem 1rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .task-input::placeholder { color: var(--muted); }
+    .task-input:focus { border-color: var(--teal); }
+
+    /* ── Timer face ── */
+    .timer-wrapper {
+      width: 100%;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      padding: 2.5rem 2rem 2rem;
+      margin-bottom: 1.5rem;
+      position: relative;
+      overflow: hidden;
+      text-align: center;
+    }
+
+    /* Glowing corner accent */
+    .timer-wrapper::before {
+      content: '';
+      position: absolute;
+      top: -40px; right: -40px;
+      width: 130px; height: 130px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(14,165,160,0.12) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .mode-label {
+      font-size: 0.62rem;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.5rem;
+    }
+
+    #current-task-display {
+      font-family: 'Fraunces', serif;
+      font-style: italic;
+      font-size: clamp(1rem, 2.5vw, 1.3rem);
+      color: var(--teal);
+      margin-bottom: 1.5rem;
+      min-height: 1.8em;
+    }
+
+    /* Big clock display */
+    #clock {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: clamp(5rem, 20vw, 8.5rem);
+      letter-spacing: 0.05em;
+      line-height: 1;
+      color: var(--text);
+      transition: color 0.4s;
+      margin-bottom: 0.3rem;
+    }
+
+    #clock.warning { color: var(--amber); }
+    #clock.danger  { color: var(--red);   }
+
+    /* SVG progress ring */
+    .ring-container {
+      position: relative;
+      width: 100%;
+      height: 6px;
+      background: var(--border);
+      margin-bottom: 2rem;
+      overflow: hidden;
+    }
+
+    #progress-bar {
+      height: 100%;
+      width: 100%;
+      background: var(--teal);
+      transform-origin: left;
+      transition: transform 1s linear, background-color 0.5s;
+    }
+
+    /* ── Mode selector ── */
+    .mode-selector {
+      display: flex;
+      gap: 0.6rem;
+      margin-bottom: 2rem;
+      width: 100%;
+      justify-content: center;
+    }
+
+    .mode-btn {
+      font-family: 'DM Mono', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding: 0.5em 1.2em;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .mode-btn:hover           { border-color: var(--teal); color: var(--teal); }
+    .mode-btn.active          { background: var(--teal); border-color: var(--teal); color: var(--bg); }
+
+    /* ── Controls ── */
+    .controls {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 2.5rem;
+    }
+
+    .btn {
+      font-family: 'Bebas Neue', sans-serif;
+      font-size: 1.3rem;
+      letter-spacing: 0.12em;
+      padding: 0.7em 2.2em;
+      border: none;
+      cursor: pointer;
+      transition: transform 0.12s, box-shadow 0.12s;
+    }
+
+    .btn:active { transform: scale(0.96); }
+
+    .btn-primary {
+      background: var(--teal);
+      color: var(--bg);
+    }
+
+    .btn-primary:hover { box-shadow: 0 0 20px rgba(14,165,160,0.4); }
+
+    .btn-secondary {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    .btn-secondary:hover { border-color: var(--muted); }
+
+    /* ── Session log ── */
+    .log-section {
+      width: 100%;
+    }
+
+    .log-header {
+      font-size: 0.62rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.8rem;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    #session-count {
+      color: var(--teal);
+    }
+
+    #log-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      max-height: 220px;
+      overflow-y: auto;
+    }
+
+    #log-list::-webkit-scrollbar { width: 3px; }
+    #log-list::-webkit-scrollbar-thumb { background: var(--border); }
+
+    .log-item {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 0.6rem 0.9rem;
+      font-size: 0.78rem;
+      animation: slideIn 0.3s ease;
+    }
+
+    .log-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--teal);
+      flex-shrink: 0;
+    }
+
+    .log-dot.break { background: var(--amber); }
+
+    .log-task { flex: 1; color: var(--text); }
+    .log-time { color: var(--muted); font-size: 0.68rem; }
+
+    .empty-log {
+      font-size: 0.75rem;
+      color: var(--muted);
+      font-style: italic;
+      padding: 1rem;
+      text-align: center;
+      border: 1px dashed var(--border);
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(-12px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    /* Pulse animation when running */
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+
+    #clock.running { animation: pulse 2s ease-in-out infinite; }
+
+    /* ── Footer ── */
+    .footer {
+      margin-top: 2.5rem;
+      font-size: 0.6rem;
+      color: var(--muted);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      text-align: center;
+    }
+
+    /* ── Notification toast ── */
+    #toast {
+      position: fixed;
+      bottom: 2rem; right: 2rem;
+      background: var(--teal);
+      color: var(--bg);
+      font-family: 'DM Mono', monospace;
+      font-size: 0.8rem;
+      letter-spacing: 0.1em;
+      padding: 0.9rem 1.4rem;
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.35s ease;
+      z-index: 999;
+      pointer-events: none;
+    }
+
+    #toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <div class="brand">Manual<span> Override</span></div>
+    <div class="session-badge">Focus Timer — JS App</div>
+  </div>
+
+  <!-- Task input -->
+  <div class="task-section">
+    <div class="task-label">What are you working on?</div>
+    <input class="task-input" id="task-input" type="text"
+           placeholder="e.g. Contact Pape about forklift..."/>
+  </div>
+
+  <!-- Timer face -->
+  <div class="timer-wrapper">
+    <div class="mode-label" id="mode-label">Focus Session</div>
+    <div id="current-task-display">Set your task above and start.</div>
+    <div id="clock">25:00</div>
+    <div class="ring-container">
+      <div id="progress-bar"></div>
+    </div>
+  </div>
+
+  <!-- Mode selector -->
+  <div class="mode-selector">
+    <button class="mode-btn active" data-minutes="25" data-mode="Focus Session">25 MIN FOCUS</button>
+    <button class="mode-btn"       data-minutes="10" data-mode="Deep Work">10 MIN SPRINT</button>
+    <button class="mode-btn"       data-minutes="5"  data-mode="Short Break">5 MIN BREAK</button>
+    <button class="mode-btn"       data-minutes="15" data-mode="Long Break">15 MIN BREAK</button>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <button class="btn btn-primary"   id="start-btn">START</button>
+    <button class="btn btn-secondary" id="reset-btn">RESET</button>
+  </div>
+
+  <!-- Session log -->
+  <div class="log-section">
+    <div class="log-header">
+      <span>Completed Sessions</span>
+      <span id="session-count">0 sessions today</span>
+    </div>
+    <ul id="log-list">
+      <li class="empty-log">No sessions yet — start your first focus block.</li>
+    </ul>
+  </div>
+
+  <div class="footer">App 2 of 2 — HTML + JavaScript — GitHub Ready</div>
+</div>
+
+<!-- Toast notification -->
+<div id="toast"></div>
+
+<script>
+  // ─── State ───────────────────────────────────────────────────────────────
+  // All timer state lives here — makes it easy to reason about
+  let totalSeconds  = 25 * 60;   // Total seconds for the selected mode
+  let remainSeconds = totalSeconds;  // Countdown tracker
+  let timerInterval = null;       // Reference to setInterval so we can clear it
+  let isRunning     = false;      // Guard: prevents double-starting
+  let sessionCount  = 0;          // How many sessions completed today
+  let currentMode   = "Focus Session";  // Label for the log
+
+  // ─── DOM references ──────────────────────────────────────────────────────
+  const clockEl       = document.getElementById('clock');
+  const progressBar   = document.getElementById('progress-bar');
+  const taskInput     = document.getElementById('task-input');
+  const taskDisplay   = document.getElementById('current-task-display');
+  const modeLabel     = document.getElementById('mode-label');
+  const startBtn      = document.getElementById('start-btn');
+  const resetBtn      = document.getElementById('reset-btn');
+  const logList       = document.getElementById('log-list');
+  const sessionCountEl= document.getElementById('session-count');
+  const toast         = document.getElementById('toast');
+  const modeBtns      = document.querySelectorAll('.mode-btn');
+
+  // ─── Format seconds → MM:SS string ─────────────────────────────────────
+  function formatTime(secs) {
+    const m = String(Math.floor(secs / 60)).padStart(2, '0');
+    const s = String(secs % 60).padStart(2, '0');
+    return `${m}:${s}`;
+  }
+
+  // ─── Update the clock display + progress bar ────────────────────────────
+  function updateDisplay() {
+    clockEl.textContent = formatTime(remainSeconds);
+
+    // Progress: shrink the bar from 100% → 0% as time runs down
+    const pct = remainSeconds / totalSeconds;
+    progressBar.style.transform = `scaleX(${pct})`;
+
+    // Color warning when ≤ 5 min, danger when ≤ 1 min
+    clockEl.classList.remove('warning', 'danger');
+    if (remainSeconds <= 60)       clockEl.classList.add('danger');
+    else if (remainSeconds <= 300) clockEl.classList.add('warning');
+
+    // Change bar color to match clock state
+    if (remainSeconds <= 60)       progressBar.style.background = '#DC2626';
+    else if (remainSeconds <= 300) progressBar.style.background = '#D97706';
+    else                           progressBar.style.background = '#0EA5A0';
+  }
+
+  // ─── Start the countdown ────────────────────────────────────────────────
+  function startTimer() {
+    if (isRunning) return;  // Guard against double-click
+    isRunning = true;
+    startBtn.textContent = 'PAUSE';
+    clockEl.classList.add('running');  // Pulsing animation while active
+
+    // Show current task in the timer face
+    taskDisplay.textContent = taskInput.value.trim() || 'Locked in.';
+
+    // setInterval fires every 1000ms (1 second)
+    timerInterval = setInterval(() => {
+      remainSeconds--;       // Decrement counter
+      updateDisplay();       // Refresh clock face
+
+      if (remainSeconds <= 0) {
+        clearInterval(timerInterval);  // Stop the interval
+        isRunning = false;
+        clockEl.classList.remove('running');
+        onComplete();   // Handle session completion
+      }
+    }, 1000);
+  }
+
+  // ─── Pause the countdown ────────────────────────────────────────────────
+  function pauseTimer() {
+    clearInterval(timerInterval);  // Freeze — don't reset
+    isRunning = false;
+    startBtn.textContent = 'RESUME';
+    clockEl.classList.remove('running');
+  }
+
+  // ─── Toggle START / PAUSE ────────────────────────────────────────────────
+  startBtn.addEventListener('click', () => {
+    if (isRunning) pauseTimer();
+    else           startTimer();
+  });
+
+  // ─── Reset to beginning of current mode ──────────────────────────────────
+  resetBtn.addEventListener('click', () => {
+    clearInterval(timerInterval);
+    isRunning = false;
+    remainSeconds = totalSeconds;  // Go back to full duration
+    startBtn.textContent = 'START';
+    clockEl.classList.remove('running', 'warning', 'danger');
+    taskDisplay.textContent = 'Set your task above and start.';
+    updateDisplay();
+  });
+
+  // ─── Mode selection ───────────────────────────────────────────────────────
+  modeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      // Don't switch modes mid-session
+      if (isRunning) { showToast('Pause first to switch modes.'); return; }
+
+      // Update active styling
+      modeBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      // Update state from data attributes on the button
+      const mins = parseInt(btn.dataset.minutes, 10);
+      currentMode   = btn.dataset.mode;
+      totalSeconds  = mins * 60;
+      remainSeconds = totalSeconds;
+      modeLabel.textContent = currentMode;
+      startBtn.textContent  = 'START';
+
+      updateDisplay();
+    });
+  });
+
+  // ─── Session complete ────────────────────────────────────────────────────
+  function onComplete() {
+    sessionCount++;
+    sessionCountEl.textContent = `${sessionCount} session${sessionCount > 1 ? 's' : ''} today`;
+
+    const taskName = taskInput.value.trim() || 'Unnamed task';
+    const now      = new Date();
+    const timeStr  = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+    // Determine if this was a break or focus
+    const isBreak = currentMode.toLowerCase().includes('break');
+
+    // Build log entry
+    const li = document.createElement('li');
+    li.className = 'log-item';
+    li.innerHTML = `
+      <div class="log-dot ${isBreak ? 'break' : ''}"></div>
+      <div class="log-task">${taskName} <span style="color:var(--muted);font-size:0.65rem;">[${currentMode}]</span></div>
+      <div class="log-time">${timeStr}</div>
+    `;
+
+    // Remove the empty state message if present
+    const emptyMsg = logList.querySelector('.empty-log');
+    if (emptyMsg) emptyMsg.remove();
+
+    // Prepend so newest is on top
+    logList.insertBefore(li, logList.firstChild);
+
+    showToast(`Session complete! ${sessionCount} down today.`);
+
+    // Reset for next round
+    remainSeconds = totalSeconds;
+    startBtn.textContent = 'START';
+    updateDisplay();
+  }
+
+  // ─── Toast notification ──────────────────────────────────────────────────
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    // Auto-hide after 3 seconds
+    setTimeout(() => toast.classList.remove('show'), 3000);
+  }
+
+  // ─── Init ────────────────────────────────────────────────────────────────
+  updateDisplay();  // Draw the initial clock face on page load
+</script>
+</body>
+</html>
